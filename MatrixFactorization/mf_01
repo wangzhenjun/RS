@@ -12,6 +12,7 @@ const int item = 1682+1;
 const int feature = 50+1;
 const int max_iter = 1000;
 
+int test_data[20010][3];
 int user_item[user][item];
 double user_feature[user][feature];
 double item_feature[item][feature];
@@ -19,7 +20,6 @@ double user_bias[user];
 double item_bias[item];
 double predict[user][item];
 double average = 0;
-int test_data[20010][3];
 
 void getTrainData()
 {
