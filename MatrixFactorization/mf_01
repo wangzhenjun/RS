@@ -1,137 +1,165 @@
-from numpy import *
-import csv
-import time
+#include <cmath>
+#include <algorithm>
+#include <vector>
+#include <iostream>
+#include <cstdio>
+#include <cstdlib>
 
-def RMSE(estimation, truth):
-    num = len(estimation)
+using namespace std;
+
+const int user = 943+1;
+const int item = 1682+1;
+const int feature = 50+1;
+const int max_iter = 1000;
+
+int user_item[user][item];
+double user_feature[user][feature];
+double item_feature[item][feature];
+double user_bias[user];
+double item_bias[item];
+double predict[user][item];
+double average = 0;
+int test_data[20010][3];
+
+void getTrainData()
+{
+    int u, i, r;
+    long long t;
+    freopen("E:\\DL\\MovieLens\\ml-100k\\u1.base", "r", stdin);
+    while (~scanf("%d%d%d%lld", &u, &i, &r, &t))
+    {
+        user_item[u][i] = r;
+    }
+    fclose(stdin);
+}
+
+void getTestData()
+{
+    int j = 0;
+    int u, i, r;
+    long long t;
+    freopen("E:\\DL\\MovieLens\\ml-100k\\u1.test", "r", stdin);
+    while (~scanf("%d%d%d%lld", &u, &i, &r, &t))
+    {
+        test_data[j][0] = u;
+        test_data[j][1] = i;
+        test_data[j][2] = r;
+        j++;
+    }
+    fclose(stdin);
+}
+
+void init()
+{
+    double avg = 0;
+    int cnt = 0;
+    for (int i = 1; i < user; ++i)
+        for (int j = 1; j < item; ++j)
+            if (user_item[i][j])
+                avg += user_item[i][j], cnt++;
+    avg /= cnt;
+    average = avg;
+    for (int i = 1; i < item; ++i)
+    {
+        double sum = 0;
+        int cnt = 0;
+        for (int j = 1; j < user; ++j)
+            if (user_item[j][i])
+                sum += user_item[j][i] - avg, cnt++;
+        item_bias[i] = sum / (5 + cnt);
+    }
+
+    for (int i = 1;  i < user; ++i)
+    {
+        double sum = 0;
+        int cnt = 0;
+        for (int j = 1; j < item; ++j)
+            if (user_item[i][j])
+                sum += user_item[i][j] - avg - item_bias[j], cnt++;
+        user_bias[i] = sum / (5 + cnt);
+    }
+}
+
+double product(int ix, int jx)
+{
+    double ret = 0;
+    for (int i = 1; i < feature; ++i)
+        ret += user_feature[ix][i]*item_feature[jx][i];
+    return ret;
+}
+
+double computeRmse()
+{
+    double sum = 0;
+    int cnt = 0;
+    for (int i = 1; i < user; ++i)
+        for (int j = 1; j < item; ++j)
+            if (user_item[i][j])
+            {
+                sum += pow(predict[i][j]-user_item[i][j], 2);
+                cnt++;
+            }
+    return sqrt(sum / cnt);
+}
+
+double computeTestRmse()
+{
+    int cnt = 0;
+    double sum = 0;
+    for (int i = 0; test_data[i][0]; ++i)
+    {
+        cnt++;
+        int u = test_data[i][0];
+        int ii = test_data[i][1];
+        int r = test_data[i][2];
+        sum += pow(predict[u][ii]-r, 2);
+    }
+    return sqrt(sum / cnt);
+}
+
+void train(double lr, double penalty)
+{
+    double rmse = 100;
+    int iter = 0;
+    while (iter < max_iter)
+    {
+        for (int i = 1; i < user; ++i)
+            for (int j = 1; j < item; ++j)
+                predict[i][j] = product(i, j) + user_bias[i] + item_bias[j];
+        double new_rmse = computeRmse();
+        if (new_rmse < rmse)
+            rmse = new_rmse;
+        printf("ter: %d, Train RMSE: %lf ", iter, rmse);
+        for (int i = 1; i < user; ++i)
+        {
+            for (int j = 1; j < item; ++j)
+            {
+                if (user_item[i][j])
+                {
+                    double error = user_item[i][j] - predict[i][j];
+                    for (int k = 1; k < feature; ++k)
+                    {
+                        double tmp = user_feature[i][k];
+                        user_feature[i][k] += lr * (error*item_feature[j][k] - penalty*user_feature[i][k]);
+                        item_feature[j][k] += lr * (error*tmp - penalty*item_feature[j][k]);
+                    }
+                    double tmp = user_bias[i] + item_bias[j] - average;
+                    user_bias[i] += lr * (error - penalty*tmp);
+                    item_bias[j] += lr * (error - penalty*tmp);
+                }
+            }
+        }
+        printf("Test RMSE: %lf\n", computeTestRmse());
+        ++iter;
+    }
+}
+
+int main()
+{
+    getTrainData();
+    getTestData();
+    init();
+    train(0.001, 0.003);
     
-    sse = sum(square(truth - estimation))
-    return sqrt(divide(sse, num-1.0))
-
-class matrixFactorization():
-    def __init__(self, num_user, num_item, num_feature, train_data, test_data, **params):
-        self._num_user = num_user
-        self._num_item = num_item
-        self._num_featrue = num_feature
-        self._train_data = train_data
-        self._test_data = test_data
-        
-        self.batch_size = int(params.get('batch_size', 1000000))
-        
-        self.epsilon = float(params.get('epsilon', 100.0))
-        self.lam = float(params.get('lam', 0.00001))
-        
-        self.max_rating = params.get('max_rating')
-        self.min_rating = params.get('min_rating')
-        
-        if self.max_rating:
-            self.max_rating = float(self.max_rating)
-        if self.min_rating:
-            self.min_rating = float(self.min_rating)
-        
-        self._mean_rating = mean(self._train_data[:, 2])
-        
-        self._user_feature = 0.2 * random.rand(num_user, num_feature)
-        self._item_feature = 0.2 * random.rand(num_item, num_feature)
-        
-        self.train_errors = []
-        self.test_errors = []
-        
-    def estimate(self, iterations = 50, converge = 1e-6):
-        last_rmse = None
-        for iteration in range(iterations):
-            data = self._train_data
-            #compute gradient
-            u_features = (self._user_feature)[data[:, 0], :]
-            i_features = (self._item_feature)[data[:, 1], :]
-            ratings = data[:, 2] - self._mean_rating
-            preds = sum(u_features*i_features, 1)
-            errs = preds - ratings
-            err_mat = tile(errs, (self._num_featrue, 1)).T
-            
-            u_grads = u_features * err_mat + self.lam * i_features
-            i_grads = i_features * err_mat + self.lam * u_features
-            
-            u_feature_grads = zeros((self._num_user, self._num_featrue))
-            i_feature_grads = zeros((self._num_item, self._num_featrue))
-            
-            for i in range(shape(data)[0]):
-                user = data[i, 0]
-                item = data[i, 1]
-                u_feature_grads[user, :] += u_grads[i, :]
-                i_feature_grads[item, :] += i_grads[i, :]
-            
-            self._user_feature = self._user_feature - (self.epsilon / self.batch_size) * u_feature_grads
-            self._item_feature = self._item_feature - (self.epsilon / self.batch_size) * i_feature_grads
-        
-            train_preds = self.predict(self._train_data)
-            train_rmse = RMSE(train_preds, float16(self._train_data[:, 2]))
-            
-            test_preds = self.predict(self._test_data)
-            test_rmse = RMSE(test_preds, float16(self._test_data[:, 2]))
-            
-            self.train_errors.append(train_rmse)
-            self.test_errors.append(test_rmse)
-            
-            print('iterations: %3d, train RMSE: %.6f, test RMSE: %.6f') % (iteration+1, train_rmse, test_rmse)
-            
-            if last_rmse:
-                if abs(train_rmse - last_rmse) < converge:
-                    break
-            last_rmse = train_rmse
-    
-    def predict(self, data):
-        u_features = self._user_feature[data[:, 0], :]
-        i_features = self._item_feature[data[:, 1], :]
-        preds = sum(u_features*i_features, 1) + self._mean_rating
-        
-        if self.max_rating:
-            preds[preds > self.max_rating] = self.max_rating
-        if self.min_rating:
-            preds[preds < self.min_rating] = self.min_rating
-        return preds
-
-def toInt(arr):
-    print('toInt() startting...')
-    arr = mat(arr)
-    m, n = shape(arr)
-    nArr = zeros((m, n), dtype='int8')
-    for i in range(m):
-        for j in range(n):
-            nArr[i, j] = int(arr[i, j])
-    print('toInt() ending...')
-    return nArr
-
-def loadTrainData(path):
-    print('loadTrainData startting...')
-    l = []
-    with open(path, 'r') as file:
-        lines = csv.reader(file)
-        for line in lines:
-            l.append(line)
-    l = array(l)
-    print('loadTrainData ending...')
-    return toInt(l)
-
-def loadTestData(path):
-    print('loadTestData startting...')
-    l = []
-    with open(path) as file:
-        lines = csv.reader(file)
-        for line in lines:
-            l.append(line)
-    l = array(l)
-    print('loadTestData ending...')
-    return toInt(l)
-
-train_path = 'E:\\DL\\MovieLens\\u1.base'
-test_path = 'E:\\DL\\MovieLens\\u1.test'
-
-train_data = loadTrainData(train_path)
-test_data = loadTestData(test_path)
-num_feature = 50
-max_iter = 20000
-num_user = 943
-num_item = 1682
-rec = matrixFactorization(num_user, num_item, num_feature, train_data, test_data, max_rating=5, min_rating=1)
-rec.estimate(max_iter)
+    return 0;
+}
