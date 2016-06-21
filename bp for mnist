@@ -1,0 +1,260 @@
+#include <iostream>
+#include <string>
+#include <cstring>
+#include <algorithm>
+#include <cstdio>
+#include <vector>
+#include <time.h>
+#include <ctime>
+#include <cmath>
+
+using namespace std;
+
+#define NUM_IN 784 // 输入层节点个数
+#define NUM_HI 50 // 隐藏层节点个数
+#define NUM_OUT 10 // 输出层节点个数
+#define NUM_TRAIN 42000 // 训练集元素个数
+#define NUM_TEST 28000 // 测试集元素个数
+#define MAX_ITER 1000 // 最大迭代次数
+
+double weight_ih[NUM_IN][NUM_HI]; // 输入层到隐藏层权值矩阵
+double weight_ho[NUM_HI][NUM_OUT]; // 隐藏层到输出层权值矩阵
+double bias_h[NUM_HI]; // 输入层到隐藏层的偏置
+double bias_o[NUM_OUT]; // 隐藏层到输出层的偏置
+
+double train_data[NUM_TRAIN][NUM_IN]; // 训练集数据
+double test_data[NUM_TEST][NUM_IN];
+double hidden[NUM_HI]; // 隐藏层值
+double output[NUM_OUT]; // 输出层值
+double lab[NUM_TRAIN][NUM_OUT]; //训练集标签矩阵
+double labels[NUM_TRAIN];
+
+double output_error[NUM_OUT]; //输出层残差
+double hidden_error[NUM_HI]; //隐藏层残差
+
+double learning_rate = 0.05; //学习率
+double epsilon = 0.0001; // 相邻两次迭代之间的差值若小于epsilon则停止迭代
+
+//参数初始化
+void initWB()
+{
+	srand(0);
+
+	for (int i = 0; i < NUM_IN; ++i)
+		for (int j = 0; j < NUM_HI; ++j)
+			weight_ih[i][j] = -1 + ((double)rand())/RAND_MAX*2;
+
+	for (int i = 0; i < NUM_HI; ++i)
+		for (int j = 0; j < NUM_OUT; ++j)
+			weight_ho[i][j] = -1 + ((double)rand())/RAND_MAX*2;
+
+	for (int i = 0; i < NUM_HI; ++i)
+		bias_h[i] = -1 + ((double)rand())/RAND_MAX*2;
+
+	for (int i = 0; i < NUM_OUT; ++i)
+		bias_o[i] = -1 + ((double)rand())/RAND_MAX*2;
+}
+
+//sigmoid激活函数
+double sigmoid(double x)
+{
+	return 1.0/(1+exp(-x));
+}
+
+//计算隐藏层输出
+void calcHidden(int idx)
+{
+	for (int i = 0; i < NUM_HI; ++i)
+	{
+		double sum = 0;
+		for (int j = 0; j < NUM_IN; ++j)
+			sum += weight_ih[j][i]*train_data[idx][j];
+		sum += bias_h[i];
+		hidden[i] = sigmoid(sum);
+	}
+}
+
+//计算输出层输出
+void calcOutput()
+{
+	for (int i = 0; i < NUM_OUT; ++i)
+	{
+		double sum = 0;
+		for (int j = 0; j < NUM_HI; ++j)
+			sum += weight_ho[j][i]*hidden[j];
+		sum += bias_o[i];
+		output[i] = sigmoid(sum);
+	}
+}
+
+//计算输出层残差
+void calcOutputError(int idx)
+{
+	for (int i = 0; i < NUM_OUT; ++i)
+		output_error[i] = output[i]*(1-output[i])*(lab[idx][i]-output[i]);
+}
+
+//计算隐藏层残差
+void calcHiddenError()
+{
+	for (int i = 0; i < NUM_HI; ++i)
+	{
+		double sum = 0;
+		for (int j = 0; j < NUM_OUT; ++j)
+			sum += weight_ho[i][j]*output_error[j];
+		hidden_error[i] = sum*(1-hidden[i])*hidden[i];
+	}
+
+}
+
+//更新隐藏层到输出层参数
+void updateOutput()
+{
+	for (int j = 0; j < NUM_OUT; ++j)
+	{
+		for (int i = 0; i < NUM_HI; ++i)
+			weight_ho[i][j] += output_error[j]*hidden[i]*learning_rate;
+		bias_o[j] += output_error[j]*learning_rate;
+	}
+}
+
+//更新输入层到隐藏层参数
+void updateHidden(int idx)
+{
+	for (int j = 0; j < NUM_HI; ++j)
+	{
+		for (int i = 0; i < NUM_IN; ++i)
+			weight_ih[i][j] += hidden_error[j]*train_data[idx][i]*learning_rate;
+		bias_h[j] += hidden_error[j]*learning_rate;
+	}
+}
+
+//计算准确率
+double test()
+{
+	int cnt = 0;
+	for (int i = 0; i < NUM_TRAIN; ++i)
+	{
+		calcHidden(i);
+		calcOutput();
+
+		double max_value = -1000;
+		int pos = -1;
+
+		for (int j = 0; j < NUM_OUT; ++j)
+		{
+			if (output[j] > max_value)
+			{
+				max_value = output[j];
+				pos = j;
+			}
+		}
+		if (labels[i] == pos) cnt++;
+	}
+	return 1.0*cnt/NUM_TRAIN;
+}
+
+//根据测试集输入，求得数字值
+int predict(int idx)
+{
+    calcHidden(idx);
+    calcOutput();
+
+    double max_value = -1000;
+    int pos = -1;
+
+    for (int j = 0; j < NUM_OUT; ++j)
+    {
+        if (output[j] > max_value)
+        {
+            max_value = output[j];
+            pos = j;
+        }
+    }
+    return pos;
+}
+
+//训练
+void train()
+{
+    double pre = 0;
+	for (int i = 0; i < MAX_ITER; ++i)
+	{
+		cout << "iter: " << i;
+		double accuracy_rate = test();
+		cout << " accuracy rate: " << accuracy_rate << endl;
+		if (accuracy_rate-pre < epsilon) break;
+		for (int j = 0; j < NUM_TRAIN; ++j)
+		{
+			calcHidden(j);
+			calcOutput();
+			calcOutputError(j);
+			calcHiddenError();
+			updateOutput();
+			updateHidden(j);
+		}
+		pre = accuracy_rate;
+	}
+}
+
+//获取训练集输入
+void getTrainData()
+{
+	FILE *fp;
+	freopen("E:\\DL\\train.csv", "r", stdin);
+	int i = 0;
+	int tmp;
+	while (~scanf("%d", &tmp))
+	{
+		labels[i] = tmp;
+		lab[i][tmp] = 1;
+		for (int j = 0; j < NUM_IN; ++j)
+		{
+			scanf(",%d", &tmp);
+			train_data[i][j] = tmp == 0 ? 0 : 1;
+		}
+		i++;
+	}
+	fclose(stdin);
+}
+
+//获取测试集输入
+void getTestData()
+{
+    FILE *fp;
+    freopen("E:\\DL\\test.csv", "r", stdin);
+    int i = 0;
+    int tmp;
+    while (~scanf("%d", &tmp))
+    {
+        train_data[i][0] = tmp;
+        for (int j = 1; j < NUM_IN; ++j)
+        {
+            scanf(",%d", &tmp);
+            train_data[i][j] = tmp == 0 ? 0 : 1;
+        }
+        i++;
+    }
+    fclose(stdin);
+}
+
+// 计算测试集准确率
+void calcTest()
+{
+    FILE *fp;
+    fp = freopen("C:\\Users\\lg\\Desktop\\ans.txt", "w+", stdout);
+	for (int i = 0; i < NUM_TEST; ++i)
+        printf("%d,%d\n", i+1, predict(i));
+    fclose(stdout);
+}
+
+int main()
+{
+	initWB();
+	getTrainData();
+	train();
+    getTestData();
+    calcTest();
+
+	return 0;
+}
